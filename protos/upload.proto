@@ -1,0 +1,21 @@
+syntax = "proto3";
+option go_package = "./";
+
+service Payload {
+  rpc ReceivePayload(stream DataChunk) returns (UploadResult);
+  rpc SendPayload(DownloadRequest) returns (stream DataChunk);
+}
+
+message DataChunk {
+  string id = 1;
+  bytes chunk = 2;
+}
+
+message UploadResult {
+  int32 recv_size = 1;
+  bool is_success = 2;
+}
+
+message DownloadRequest {
+  string id = 1;
+}
