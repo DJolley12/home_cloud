@@ -3,6 +3,7 @@ package payload
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"os"
 
@@ -13,6 +14,23 @@ import (
 type PayloadClient struct {
 	client    pb.PayloadClient
 	chunkSize int
+}
+
+func NewPayloadClient(client pb.PayloadClient, chunkSize int) (PayloadClient, error) {
+	if client == nil {
+		err := fmt.Errorf("client cannot be nil")
+		glog.Error(err)
+		return PayloadClient{}, err
+	}
+	if chunkSize < 256000 {
+		err := fmt.Errorf("cannot have chunk size smaller thank 250kB")
+		glog.Error(err)
+		return PayloadClient{}, err
+	}
+	return PayloadClient{
+		client: client,
+		chunkSize: chunkSize,
+	}, nil
 }
 
 func (c *PayloadClient) UploadFile(filePath string) {

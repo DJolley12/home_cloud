@@ -4,6 +4,8 @@ import (
 	"flag"
 	"log"
 
+	pb "github.com/DJolley12/home_cloud/protos"
+	"github.com/DJolley12/home_cloud/terminal_client/payload"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
@@ -20,4 +22,7 @@ func main()  {
   }
   defer conn.Close()
 
+	client := payload.PayloadClient{
+		client: pb 
+	}
 }
