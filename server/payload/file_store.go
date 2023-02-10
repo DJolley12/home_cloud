@@ -6,25 +6,19 @@ import (
 	"os"
 )
 
-func createFile(name string) error {
+func createFile(name string) (*os.File, error) {
 	_, err := os.Stat(name)
 	if err == nil {
-		return fmt.Errorf("file %v already exists", name)
+		return nil, fmt.Errorf("file %v already exists", name)
 	} else if errors.Is(err, os.ErrNotExist) {
-		err = os.WriteFile("filename.txt", []byte("Hello"), 0644)
+		return os.Create(name)
 	}
 
-	return err
+	return nil, err
 }
 
-func writeFile(name string, b []byte) error {
-	f, err := os.OpenFile(name, os.O_APPEND, 0644)
-	defer f.Close()
-	if err != nil {
-		return err
-	}
-
-	_, err = f.Write(b)
+func writeFile(f *os.File, b []byte) error {
+	_, err := f.Write(b)
 	if err != nil {
 		return err
 	}

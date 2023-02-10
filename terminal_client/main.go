@@ -13,6 +13,10 @@ import (
 func main()  {
   serverAddr := flag.String("server-addr", "localhost:50051", "ip address and port for the file store server")
   filePath := flag.String("file-path", "", "file-path of file to upload")
+  chunkSize := flag.Int("chunk-size", 1572864, "size for each file chunk")
+
+  flag.Parse()
+
   if *filePath == "" {
   	log.Fatal("cannot have empty file path")
   }
@@ -22,7 +26,12 @@ func main()  {
   }
   defer conn.Close()
 
-	client := payload.PayloadClient{
-		client: pb 
+	client, err := payload.NewPayloadClient(pb.NewPayloadClient(conn), *chunkSize)
+	if err != nil {
+		log.Fatalf("could not create payload client %v", err)
+	}
+	err = client.UploadFile(*filePath)
+	if err != nil {
+		log.Fatal(err)
 	}
 }

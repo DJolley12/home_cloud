@@ -5,7 +5,9 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log"
 	"os"
+	"path/filepath"
 
 	pb "github.com/DJolley12/home_cloud/protos"
 	"github.com/golang/glog"
@@ -28,41 +30,63 @@ func NewPayloadClient(client pb.PayloadClient, chunkSize int) (PayloadClient, er
 		return PayloadClient{}, err
 	}
 	return PayloadClient{
-		client: client,
+		client:    client,
 		chunkSize: chunkSize,
 	}, nil
 }
 
-func (c *PayloadClient) UploadFile(filePath string) {
+func (c *PayloadClient) UploadFile(filePath string) error {
 	file, err := os.Open(filePath)
 	if err != nil {
-		glog.Errorf("error opening file %v - err: %v", filePath, err)
+		fmt.Printf("error opening file %v - err: %v\n", filePath, err)
 	}
 	defer file.Close()
 	p, err := c.client.ReceivePayload(context.Background())
 	if err != nil {
-		glog.Errorf("error getting payload upload: %v", err)
+		fmt.Printf("error getting payload upload: %v\n", err)
+		return err
 	}
 
+	chunkCount := 0
+	glog.Info("reading file")
 	for {
+
 		r := io.LimitReader(file, int64(c.chunkSize))
-		b := make([]byte, c.chunkSize)
+		b := make([]byte, 0, c.chunkSize)
 		buf := bytes.NewBuffer(b)
-		n, sendErr := io.Copy(buf, r)
-		if sendErr != nil {
-		  glog.Errorf("error reading file %v", sendErr)
+		n, err := io.Copy(buf, r)
+		if err != nil {
+			fmt.Printf("error reading file %v\n", err)
 		} else if n < 1 {
-		  glog.Info("done reading file")
-		  break
+			fmt.Println("done reading file")
+			break
 		}
+		chunkCount++
+		glog.Infof("read chunk: %v, bytes: %v\n", chunkCount, n)
+
 		req := &pb.DataChunk{
-		  Id: file.Name(),
-		  Chunk: b,
+			Id:    filepath.Base(file.Name()),
+			Chunk: buf.Bytes(),
 		}
-		sendErr = p.Send(req)
-		if sendErr != nil {
-		  glog.Errorf("error sending data chunk: %v", sendErr)
-		  break
+		err = p.Send(req)
+		if err != nil {
+			fmt.Printf("error sending data chunk: %v\n", err)
+			break
 		}
+		fmt.Println("sent chunk")
 	}
+	res, err := p.CloseAndRecv()
+	if err != nil {
+		glog.Errorf("error received during close send %v", err)
+	}
+	fi, err := file.Stat()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	if !res.GetIsSuccess() || int64(res.GetRecvSize()) != fi.Size() {
+		fmt.Printf("file upload unsuccessful - recv size %v, file size %v", res.GetRecvSize(), fi.Size())
+	}
+
+	return err
 }
