@@ -2,7 +2,7 @@
 // versions:
 // - protoc-gen-go-grpc v1.2.0
 // - protoc             v3.12.4
-// source: protos/upload.proto
+// source: protos/payload.proto
 
 package __
 
@@ -198,5 +198,5 @@ var Payload_ServiceDesc = grpc.ServiceDesc{
 			ServerStreams: true,
 		},
 	},
-	Metadata: "protos/upload.proto",
+	Metadata: "protos/payload.proto",
 }

@@ -4,6 +4,15 @@ option go_package = "./";
 service Payload {
   rpc ReceivePayload(stream DataChunk) returns (UploadResult);
   rpc SendPayload(DownloadRequest) returns (stream DataChunk);
+  rpc RequestDownload(AuthRequest) returns (AuthResult);
+}
+
+message AuthRequest {
+
+}
+
+message AuthResult {
+  
 }
 
 message DataChunk {
@@ -18,4 +27,5 @@ message UploadResult {
 
 message DownloadRequest {
   string id = 1;
+  string auth_key = 2;
 }
