@@ -24,6 +24,7 @@ const _ = grpc.SupportPackageIsVersion7
 type PayloadClient interface {
 	ReceivePayload(ctx context.Context, opts ...grpc.CallOption) (Payload_ReceivePayloadClient, error)
 	SendPayload(ctx context.Context, in *DownloadRequest, opts ...grpc.CallOption) (Payload_SendPayloadClient, error)
+	RequestDownload(ctx context.Context, in *AuthRequest, opts ...grpc.CallOption) (*AuthResult, error)
 }
 
 type payloadClient struct {
@@ -100,12 +101,22 @@ func (x *payloadSendPayloadClient) Recv() (*DataChunk, error) {
 	return m, nil
 }
 
+func (c *payloadClient) RequestDownload(ctx context.Context, in *AuthRequest, opts ...grpc.CallOption) (*AuthResult, error) {
+	out := new(AuthResult)
+	err := c.cc.Invoke(ctx, "/Payload/RequestDownload", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // PayloadServer is the server API for Payload service.
 // All implementations must embed UnimplementedPayloadServer
 // for forward compatibility
 type PayloadServer interface {
 	ReceivePayload(Payload_ReceivePayloadServer) error
 	SendPayload(*DownloadRequest, Payload_SendPayloadServer) error
+	RequestDownload(context.Context, *AuthRequest) (*AuthResult, error)
 	mustEmbedUnimplementedPayloadServer()
 }
 
@@ -118,6 +129,9 @@ func (UnimplementedPayloadServer) ReceivePayload(Payload_ReceivePayloadServer) e
 }
 func (UnimplementedPayloadServer) SendPayload(*DownloadRequest, Payload_SendPayloadServer) error {
 	return status.Errorf(codes.Unimplemented, "method SendPayload not implemented")
+}
+func (UnimplementedPayloadServer) RequestDownload(context.Context, *AuthRequest) (*AuthResult, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method RequestDownload not implemented")
 }
 func (UnimplementedPayloadServer) mustEmbedUnimplementedPayloadServer() {}
 
@@ -179,13 +193,36 @@ func (x *payloadSendPayloadServer) Send(m *DataChunk) error {
 	return x.ServerStream.SendMsg(m)
 }
 
+func _Payload_RequestDownload_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AuthRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PayloadServer).RequestDownload(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/Payload/RequestDownload",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PayloadServer).RequestDownload(ctx, req.(*AuthRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // Payload_ServiceDesc is the grpc.ServiceDesc for Payload service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
 var Payload_ServiceDesc = grpc.ServiceDesc{
 	ServiceName: "Payload",
 	HandlerType: (*PayloadServer)(nil),
-	Methods:     []grpc.MethodDesc{},
+	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "RequestDownload",
+			Handler:    _Payload_RequestDownload_Handler,
+		},
+	},
 	Streams: []grpc.StreamDesc{
 		{
 			StreamName:    "ReceivePayload",

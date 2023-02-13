@@ -7,9 +7,13 @@ require (
 	google.golang.org/protobuf v1.28.1
 )
 
+require golang.org/x/crypto v0.4.0 // indirect
+
 require (
+	filippo.io/age v1.1.1
 	github.com/golang/glog v1.0.0
 	github.com/golang/protobuf v1.5.2 // indirect
+	github.com/lib/pq v1.10.7
 	golang.org/x/net v0.4.0 // indirect
 	golang.org/x/sys v0.3.0 // indirect
 	golang.org/x/text v0.5.0 // indirect
