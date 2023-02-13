@@ -1,0 +1,3 @@
+INSERT INTO migrations 
+  DEFAULT VALUES
+  RETURNING id;
