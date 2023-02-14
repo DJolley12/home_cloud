@@ -2,30 +2,53 @@ syntax = "proto3";
 option go_package = "./";
 
 service Payload {
+  // exchange public keys
+  rpc RequestKey(KeyRequest) returns (KeyResult);
+  // get refresh token
+  rpc RefreshToken(AuthRequest) returns (Refresh);
+  // get access token
+  rpc Authorize(Refresh) returns (Access);
   rpc ReceivePayload(stream DataChunk) returns (UploadResult);
   rpc SendPayload(DownloadRequest) returns (stream DataChunk);
-  rpc RequestDownload(AuthRequest) returns (AuthResult);
+  rpc RequestDownload(DownloadRequest) returns (stream DataChunk);
 }
 
 message AuthRequest {
-
+  int64 user_id = 1;
+  string passphrase = 2;
 }
 
-message AuthResult {
-  
+message Access {
+  string token = 1;
+}
+
+message Refresh {
+  int64 user_id = 1;
+  string token = 2;
 }
 
 message DataChunk {
   string id = 1;
-  bytes chunk = 2;
+  string signature = 2;
+  bytes chunk = 3;
+}
+
+message KeyRequest {
+  int64 user_id = 1;
+  bytes key = 2;
+}
+
+message KeyResult {
+  bytes key = 1;
 }
 
 message UploadResult {
   int32 recv_size = 1;
   bool is_success = 2;
+  Access access = 3;
 }
 
 message DownloadRequest {
   string id = 1;
-  string auth_key = 2;
+  Access access = 2;
 }

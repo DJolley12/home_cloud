@@ -26,13 +26,13 @@ const (
 )
 
 const (
-	base   = "server/persist/migrations/sql"
-	check  = "migration_core/check_schema.sql"
-	create = "migration_core/create_migration.sql"
-	get    = "migration_core/get_migration.sql"
-	down   = "migration_core/down_migration.sql"
-	up     = "migration_core/up_migration.sql"
-	start  = "migration_core/start_migration.sql"
+	base   = "server/persist/migration/sql"
+	check  = "core/check_schema.sql"
+	create = "core/create_migration.sql"
+	get    = "core/get_migration.sql"
+	down   = "core/down_migration.sql"
+	up     = "core/up_migration.sql"
+	start  = "core/start_migration.sql"
 )
 
 func FromString(mType string) MigrationType {
