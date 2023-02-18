@@ -1,3 +1,9 @@
+# Description
+This is still a wip, but the end goal will be a cloud file share server that will use grpc to stream file uploads and downloads. 
+Right now, basic uploads are possible, and a secure asymmetric encryption base authentication scheme exists. 
+Goals to finish a CLI client, and in the more distant future, an android app client as well.
+Addtionally, contained inside the repo is a simple up/down migration framework built around postgres.
+
 # Roadmap
 
 ## DB
