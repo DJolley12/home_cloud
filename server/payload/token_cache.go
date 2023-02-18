@@ -3,31 +3,39 @@ package payload
 import (
 	"context"
 	"time"
+
+	"github.com/DJolley12/home_cloud/server/payload/services"
 )
 
 type tokenCache struct {
-	cache       map[string]userTokenInfo
+	cache       map[int64]userTokenInfo
 	sizeLimit   int
 	expiryLimit time.Duration
 }
 
 type userTokenInfo struct {
-	expiry time.Time
-	userId int64
+	expiry    time.Time
+	userId    int64
+	sig       []byte
+	cryptoKey []byte
+	token     string
 }
 
 func newTokenCache(sizeLimit int, expiryLimit time.Duration) tokenCache {
 	return tokenCache{
-		cache: make(map[string]userTokenInfo),
-		sizeLimit: sizeLimit,
+		cache:       make(map[int64]userTokenInfo),
+		sizeLimit:   sizeLimit,
 		expiryLimit: expiryLimit,
 	}
 }
 
-func (c *tokenCache) add(token string, userId int64) {
-	c.cache[token] = userTokenInfo{
-		expiry: time.Now(),
-		userId: userId,
+func (c *tokenCache) add(userId int64, sig []byte, cryptoKey []byte, token string) {
+	c.cache[userId] = userTokenInfo{
+		expiry:    time.Now(),
+		userId:    userId,
+		sig:       sig,
+		cryptoKey: cryptoKey,
+		token:     token,
 	}
 }
 
@@ -38,8 +46,13 @@ func (c *tokenCache) tokenIsValid(ctx context.Context) bool {
 		panic("not ok")
 		return false
 	}
+	userId, ok := ctx.Value("user-id").(int64)
+	if !ok {
+		panic("not ok")
+		return false
+	}
 
-	val, ok := c.cache[token]
+	val, ok := c.cache[userId]
 	if !ok {
 		panic("not ok cache")
 		return false
@@ -49,7 +62,16 @@ func (c *tokenCache) tokenIsValid(ctx context.Context) bool {
 		return false
 	}
 
-	return true
+	t, err := services.DecryptAndVerify(val.cryptoKey, []byte(token), val.sig)
+	if err != nil {
+		return false
+	}
+
+	if string(t) == val.token {
+		return true
+	}
+
+	return false
 }
 
 func (c *tokenCache) collectTokens() {

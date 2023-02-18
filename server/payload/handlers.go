@@ -9,10 +9,11 @@ import (
 	"time"
 
 	pb "github.com/DJolley12/home_cloud/protos"
+	services "github.com/DJolley12/home_cloud/server/payload/services"
+	"github.com/DJolley12/home_cloud/server/persist/ports"
 	"github.com/golang/glog"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 	// "google.golang.org/grpc/metadata"
 )
 
@@ -22,6 +23,8 @@ type PayloadServer struct {
 	tokenCache tokenCache
 	passCache  passCache
 	tokenSize  int
+	keys       services.KeyService
+	persist    ports.UserPersist
 }
 
 func NewPaylodServer(basePath string) (*PayloadServer, error) {
@@ -45,35 +48,9 @@ func NewPaylodServer(basePath string) (*PayloadServer, error) {
 	return server, nil
 }
 
-func (s *PayloadServer) RequestKey(ctx context.Context, req *pb.KeyRequest) (*pb.KeyResult, error) {
-
-	return &pb.KeyResult{
-		Key: k,
-	}, nil
-}
-
-func (s *PayloadServer) RefreshToken(ctx context.Context, req *pb.AuthRequest) (*pb.Refresh, error) {
-	userId := req.GetUserId()
-	
-	if encr, err := s.passCache.passIsValid(userId); err != nil {
-		return nil, status.Errorf(codes.Unauthenticated, err.Error())
-		// should be encrypted with server pub key
-	} else if encr != req.GetPassphrase() {
-		return nil, status.Errorf(codes.Unauthenticated, "password not valid")
-	}
-
-	token, err := MakeRefreshToken(userId)
-	if err != nil {
-		return nil, err
-	}
-	return &pb.Refresh{
-		Token: token,
-	}, nil
-}
-
 func (s *PayloadServer) Authorize(ctx context.Context, req *pb.AuthRequest) (*pb.AuthResult, error) {
 	// verify
-	userId, ok, err := VerifyPassphrase(req.GetPassphrase())
+	userId, ok, err := s.keys.VerifyPassphrase(req.GetPassphrase())
 	if err != nil || userId < 1 {
 		glog.Error(err)
 		return nil, grpc.Errorf(codes.Internal, "internal error, unable to complete authorization")
@@ -83,47 +60,59 @@ func (s *PayloadServer) Authorize(ctx context.Context, req *pb.AuthRequest) (*pb
 		return nil, grpc.Errorf(codes.Unauthenticated, "unable to verify passphrase")
 	}
 	// generate keys
-	kSet, err := GenKeyPairForUser(userId, []byte(req.GetKeys().GetEncryptionKey()), []byte(req.GetKeys().GetSignKey()))
+	kSet, err := s.keys.GenKeyPairForUser(userId, []byte(req.GetKeys().GetEncryptionKey()), []byte(req.GetKeys().GetSignKey()))
 	if err != nil {
 		glog.Errorf("error generating key pair")
 		return nil, grpc.Errorf(codes.Internal, "internal error, unable to complete authorization")
 	}
-
-	refToken, err := MakeRefreshToken(userId, kSet.pubEncrKey, kSet.privSign)
+	// refresh token
+	tokenSig, err := s.keys.MakeRefreshToken(userId, req.GetKeys().GetEncryptionKey(), kSet.PrivSign)
 	if err != nil {
 		glog.Errorf("unable to make refresh token: %v", err)
 		return nil, grpc.Errorf(codes.Internal, "internal error, unable to complete authorization")
 	}
+
 	return &pb.AuthResult{
+		UserId: userId,
 		Keys: &pb.KeySet{
-			EncryptionKey: kSet.pubEncrKey,
-			SignKey: kSet.pubSignKey,
+			EncryptionKey: kSet.PubEncrKey,
+			SignKey:       kSet.PubSignKey,
 		},
 		TokenSet: &pb.TokenSet{
-			UserId: userId,
-			RefreshToken: refToken,
+			Token:     tokenSig.Token,
+			Signature: tokenSig.Signature,
 		},
 	}, nil
 }
 
 func (s *PayloadServer) GetAccess(ctx context.Context, req *pb.RefreshRequest) (*pb.Access, error) {
-	if err := VerifyRefreshToken(req.GetTokenSet().GetUserId(), ); err != nil {
+	userId := ctx.Value("user-id").(int64)
+	ts := services.TokenSig{
+		Token:     req.GetTokenSet().GetToken(),
+		Signature: req.TokenSet.GetSignature(),
+	}
+	if err := s.keys.VerifyRefreshToken(userId, ts); err != nil {
 		return nil, err
 	}
-	token := GenerateToken(50)
-	encr, err := Encrypt(req.GetTokenSet().GetUserId(), []byte(token))
-	// TODO how to deal with cache?
-	// s.tokenCache.add(, req.GetUserId())
+	tokenSig, plainTxtTkn, err := s.keys.MakeAccessToken(userId)
+	if err != nil {
+		return nil, err
+	}
+
+	keys, err := s.persist.GetKeys(userId)
+	s.tokenCache.add(userId, keys.UserSignKey, keys.PrivSignKey, plainTxtTkn)
 	if err != nil {
 		return nil, err
 	}
 	return &pb.Access{
-		Token: string(encr),
+		TokenSet: &pb.TokenSet{
+			Token:     tokenSig.Token,
+			Signature: tokenSig.Signature,
+		},
 	}, nil
 }
 
 func (s *PayloadServer) ReceivePayload(stream pb.Payload_ReceivePayloadServer) error {
-	size := 0
 	if !s.tokenCache.tokenIsValid(stream.Context()) {
 		return grpc.Errorf(codes.Unauthenticated, "invalid access token")
 	}
@@ -168,6 +157,9 @@ func (s *PayloadServer) ReceivePayload(stream pb.Payload_ReceivePayloadServer) e
 	})
 }
 
-func (s *PayloadServer) SendPayload(req *pb.DownloadRequest, sendServer pb.Payload_SendPayloadServer) error {
+func (s *PayloadServer) SendPayload(ctx context.Context, req *pb.DownloadRequest, sendServer pb.Payload_SendPayloadServer) error {
+	if !s.tokenCache.tokenIsValid(ctx) {
+		return grpc.Errorf(codes.Unauthenticated, "invalid access token")
+	}
 	return nil
 }

@@ -18,16 +18,17 @@ message AuthRequest {
 }
 
 message AuthResult {
-  KeySet keys = 1;
-  TokenSet token_set = 2;
+  int64 user_id = 1;
+  KeySet keys = 2;
+  TokenSet token_set = 3;
 }
 
 message Access {
-  string access_token = 1;
+  TokenSet token_set = 1;
 }
 
 message RefreshRequest {
-  TokenSet token_set = 2;
+  TokenSet token_set = 1;
 }
 
 message KeySet {
@@ -36,8 +37,8 @@ message KeySet {
 }
 
 message TokenSet {
-  int64 user_id = 1;
-  string refresh_token = 2;
+  bytes token = 1;
+  bytes signature = 2;
 }
 
 message DataChunk {
