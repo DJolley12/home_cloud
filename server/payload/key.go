@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"math/rand"
+	"strings"
 
 	"filippo.io/age"
 	"github.com/DJolley12/home_cloud/server/persist"
@@ -17,12 +18,17 @@ func decrypt(privK, data []byte) (*bytes.Buffer, error) {
 		return nil, err
 	}
 
-	out := &bytes.Buffer{}
+	buf := bytes.NewBuffer(data)
+	b := make([]byte, 0)
+	out := bytes.NewBuffer(b)
 
-	r, err := age.Decrypt(out, rec)
+	println(buf.String)
+	r, err := age.Decrypt(buf, rec)
 	if err != nil {
 		return nil, err
 	}
+	_, _ = r.Read(b)
+	println(string(b))
 	if _, err := io.Copy(out, r); err != nil {
 		return nil, err
 	}
@@ -56,41 +62,62 @@ func encrypt(pubK, data []byte) ([]byte, error) {
 	return out.Bytes(), nil
 }
 
-func GenKeyPairForUser(userId int64, userKey []byte) (ed25519.PublicKey, error) {
-	pub, priv, err := ed25519.GenerateKey(nil)
-	if err != nil {
-		return nil, err
-	}
-	if err = persist.InsertKeySet(userId, pub, priv, userKey); err != nil {
-		return nil, err
-	}
-	return pub, nil
+type keySet struct {
+	privSign   []byte
+	pubSignKey []byte
+	pubEncrKey string
 }
 
-func VerifyPassphrase(encr, actPass string, userId int64) (bool, error) {
-	key, err := persist.GetPrivateKey(userId)
+// returns server's generated public encryption key, public sign key, error
+func GenKeyPairForUser(userId int64, userEncrKey, userSignKey []byte) (*keySet, error) {
+	privEncrId, err := age.GenerateX25519Identity()
 	if err != nil {
-		return false, err
+		return nil, err
 	}
-	pass, err := decrypt(key, []byte(encr))
+	pubEncryR := privEncrId.Recipient()
+
+	pubSign, privSign, err := ed25519.GenerateKey(nil)
 	if err != nil {
-		return false, err
-	}
-	if string(pass.Bytes()) == actPass {
-		return true, nil
+		return nil, err
 	}
 
-	return false, nil
+	pubEncrStr := pubEncryR.String()
+	k := persist.Keys{
+		PubEncrKey:  []byte(pubEncrStr),
+		PrivEncrKey: []byte(privEncrId.String()),
+		PubSignKey:  pubSign,
+		PrivSignKey: privSign,
+		UserEncrKey: userEncrKey,
+		UserSignKey: userSignKey,
+	}
+	if err = persist.InsertKeySet(userId, k); err != nil {
+		return nil, err
+	}
+
+	return &keySet{
+		privSign:   privSign,
+		pubSignKey: pubSign,
+		pubEncrKey: pubEncrStr,
+	}, nil
+}
+
+func VerifyPassphrase(userPass string) (int64, bool, error) {
+	return persist.GetUserPassphrase(userPass)
 }
 
 func VerifyRefreshToken(userId int64, encr string) error {
-	privK, err := persist.GetPrivateKey(userId)
+	k, err := persist.GetKeys(userId)
 	if err != nil {
 		return err
 	}
-	tk, err := decrypt(privK, []byte(encr))
+	t, err := decrypt(k.PrivEncrKey, []byte(encr))
 	if err != nil {
 		return err
+	}
+	spl := strings.Split(t.String(), ".")
+	token, sig := spl[0], spl[1]
+	if ok := ed25519.Verify(k.PubSignKey, sig, ); !ok {
+		return fmt.Errorf("token does not match")
 	}
 
 	dbToken, err := persist.GetRefreshToken(userId)
@@ -99,28 +126,25 @@ func VerifyRefreshToken(userId int64, encr string) error {
 	}
 
 	// match
-	if dbToken == string(tk.Bytes()) {
+	if dbToken == string(strings.Split(token, ".")[0]) {
 		return nil
 	}
 
 	return fmt.Errorf("token does not match")
 }
 
-func MakeRefreshToken(userId int64) (string, error) {
+func MakeRefreshToken(userId int64, encryptKey string, signKey []byte) (string, error) {
 	token := GenerateToken(50)
-	key, err := persist.GetPublicKey(userId)
+	err := persist.InsertRefreshToken(userId, token)
 	if err != nil {
 		return "", err
 	}
-	buf, err := encrypt(key, []byte(token))
+
+	buf, err := encrypt([]byte(encryptKey), ed25519.Sign(signKey, []byte(token)))
 	if err != nil {
 		return "", err
 	}
-	err = persist.InsertRefreshToken(userId, string(buf.Bytes()))
-	if err != nil {
-		return "", err
-	}
-	return string(buf.Bytes()), nil
+	return string(buf), nil
 }
 
 var letterRunes = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890-!@#$%^&*()-=+[]")
@@ -131,4 +155,8 @@ func GenerateToken(n int) string {
 		b[i] = letterRunes[rand.Intn(len(letterRunes))]
 	}
 	return string(b)
+}
+
+func SignId(userId int64, signKey []byte) []byte {
+	return ed25519.Sign(signKey, []byte(string(userId)))
 }

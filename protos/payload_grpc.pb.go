@@ -23,11 +23,10 @@ const _ = grpc.SupportPackageIsVersion7
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type PayloadClient interface {
 	// exchange public keys
-	RequestKey(ctx context.Context, in *KeyRequest, opts ...grpc.CallOption) (*KeyResult, error)
 	// get refresh token
-	RefreshToken(ctx context.Context, in *AuthRequest, opts ...grpc.CallOption) (*Refresh, error)
+	Authorize(ctx context.Context, in *AuthRequest, opts ...grpc.CallOption) (*AuthResult, error)
 	// get access token
-	Authorize(ctx context.Context, in *Refresh, opts ...grpc.CallOption) (*Access, error)
+	GetAccess(ctx context.Context, in *RefreshRequest, opts ...grpc.CallOption) (*Access, error)
 	ReceivePayload(ctx context.Context, opts ...grpc.CallOption) (Payload_ReceivePayloadClient, error)
 	SendPayload(ctx context.Context, in *DownloadRequest, opts ...grpc.CallOption) (Payload_SendPayloadClient, error)
 	RequestDownload(ctx context.Context, in *DownloadRequest, opts ...grpc.CallOption) (Payload_RequestDownloadClient, error)
@@ -41,27 +40,18 @@ func NewPayloadClient(cc grpc.ClientConnInterface) PayloadClient {
 	return &payloadClient{cc}
 }
 
-func (c *payloadClient) RequestKey(ctx context.Context, in *KeyRequest, opts ...grpc.CallOption) (*KeyResult, error) {
-	out := new(KeyResult)
-	err := c.cc.Invoke(ctx, "/Payload/RequestKey", in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *payloadClient) RefreshToken(ctx context.Context, in *AuthRequest, opts ...grpc.CallOption) (*Refresh, error) {
-	out := new(Refresh)
-	err := c.cc.Invoke(ctx, "/Payload/RefreshToken", in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *payloadClient) Authorize(ctx context.Context, in *Refresh, opts ...grpc.CallOption) (*Access, error) {
-	out := new(Access)
+func (c *payloadClient) Authorize(ctx context.Context, in *AuthRequest, opts ...grpc.CallOption) (*AuthResult, error) {
+	out := new(AuthResult)
 	err := c.cc.Invoke(ctx, "/Payload/Authorize", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *payloadClient) GetAccess(ctx context.Context, in *RefreshRequest, opts ...grpc.CallOption) (*Access, error) {
+	out := new(Access)
+	err := c.cc.Invoke(ctx, "/Payload/GetAccess", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -171,11 +161,10 @@ func (x *payloadRequestDownloadClient) Recv() (*DataChunk, error) {
 // for forward compatibility
 type PayloadServer interface {
 	// exchange public keys
-	RequestKey(context.Context, *KeyRequest) (*KeyResult, error)
 	// get refresh token
-	RefreshToken(context.Context, *AuthRequest) (*Refresh, error)
+	Authorize(context.Context, *AuthRequest) (*AuthResult, error)
 	// get access token
-	Authorize(context.Context, *Refresh) (*Access, error)
+	GetAccess(context.Context, *RefreshRequest) (*Access, error)
 	ReceivePayload(Payload_ReceivePayloadServer) error
 	SendPayload(*DownloadRequest, Payload_SendPayloadServer) error
 	RequestDownload(*DownloadRequest, Payload_RequestDownloadServer) error
@@ -186,14 +175,11 @@ type PayloadServer interface {
 type UnimplementedPayloadServer struct {
 }
 
-func (UnimplementedPayloadServer) RequestKey(context.Context, *KeyRequest) (*KeyResult, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method RequestKey not implemented")
-}
-func (UnimplementedPayloadServer) RefreshToken(context.Context, *AuthRequest) (*Refresh, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method RefreshToken not implemented")
-}
-func (UnimplementedPayloadServer) Authorize(context.Context, *Refresh) (*Access, error) {
+func (UnimplementedPayloadServer) Authorize(context.Context, *AuthRequest) (*AuthResult, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Authorize not implemented")
+}
+func (UnimplementedPayloadServer) GetAccess(context.Context, *RefreshRequest) (*Access, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetAccess not implemented")
 }
 func (UnimplementedPayloadServer) ReceivePayload(Payload_ReceivePayloadServer) error {
 	return status.Errorf(codes.Unimplemented, "method ReceivePayload not implemented")
@@ -217,44 +203,8 @@ func RegisterPayloadServer(s grpc.ServiceRegistrar, srv PayloadServer) {
 	s.RegisterService(&Payload_ServiceDesc, srv)
 }
 
-func _Payload_RequestKey_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(KeyRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(PayloadServer).RequestKey(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: "/Payload/RequestKey",
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(PayloadServer).RequestKey(ctx, req.(*KeyRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _Payload_RefreshToken_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(AuthRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(PayloadServer).RefreshToken(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: "/Payload/RefreshToken",
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(PayloadServer).RefreshToken(ctx, req.(*AuthRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
 func _Payload_Authorize_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(Refresh)
+	in := new(AuthRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
@@ -266,7 +216,25 @@ func _Payload_Authorize_Handler(srv interface{}, ctx context.Context, dec func(i
 		FullMethod: "/Payload/Authorize",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(PayloadServer).Authorize(ctx, req.(*Refresh))
+		return srv.(PayloadServer).Authorize(ctx, req.(*AuthRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Payload_GetAccess_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RefreshRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PayloadServer).GetAccess(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/Payload/GetAccess",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PayloadServer).GetAccess(ctx, req.(*RefreshRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -347,16 +315,12 @@ var Payload_ServiceDesc = grpc.ServiceDesc{
 	HandlerType: (*PayloadServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{
-			MethodName: "RequestKey",
-			Handler:    _Payload_RequestKey_Handler,
-		},
-		{
-			MethodName: "RefreshToken",
-			Handler:    _Payload_RefreshToken_Handler,
-		},
-		{
 			MethodName: "Authorize",
 			Handler:    _Payload_Authorize_Handler,
+		},
+		{
+			MethodName: "GetAccess",
+			Handler:    _Payload_GetAccess_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

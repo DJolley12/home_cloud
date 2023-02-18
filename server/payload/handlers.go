@@ -12,6 +12,7 @@ import (
 	"github.com/golang/glog"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	// "google.golang.org/grpc/metadata"
 )
 
@@ -45,10 +46,6 @@ func NewPaylodServer(basePath string) (*PayloadServer, error) {
 }
 
 func (s *PayloadServer) RequestKey(ctx context.Context, req *pb.KeyRequest) (*pb.KeyResult, error) {
-	k, err := GenKeyPairForUser(req.GetUserId(), req.GetKey())
-	if err != nil {
-		return nil, err
-	}
 
 	return &pb.KeyResult{
 		Key: k,
@@ -57,17 +54,14 @@ func (s *PayloadServer) RequestKey(ctx context.Context, req *pb.KeyRequest) (*pb
 
 func (s *PayloadServer) RefreshToken(ctx context.Context, req *pb.AuthRequest) (*pb.Refresh, error) {
 	userId := req.GetUserId()
-	encr, err := s.passCache.passIsValid(userId)
-	if err != nil {
-		return nil, err
+	
+	if encr, err := s.passCache.passIsValid(userId); err != nil {
+		return nil, status.Errorf(codes.Unauthenticated, err.Error())
+		// should be encrypted with server pub key
+	} else if encr != req.GetPassphrase() {
+		return nil, status.Errorf(codes.Unauthenticated, "password not valid")
 	}
-	match, err := VerifyPassphrase(req.GetPassphrase(), encr, userId)
-	if err != nil {
-		return nil, err
-	}
-	if !match {
-		return nil, grpc.Errorf(codes.Unauthenticated, "unable to verify passphrase")
-	}
+
 	token, err := MakeRefreshToken(userId)
 	if err != nil {
 		return nil, err
@@ -77,14 +71,49 @@ func (s *PayloadServer) RefreshToken(ctx context.Context, req *pb.AuthRequest) (
 	}, nil
 }
 
-func (s *PayloadServer) Authorize(ctx context.Context, req *pb.Refresh) (*pb.Access, error) {
-	if err := VerifyRefreshToken(req.GetUserId(), req.GetToken()); err != nil {
+func (s *PayloadServer) Authorize(ctx context.Context, req *pb.AuthRequest) (*pb.AuthResult, error) {
+	// verify
+	userId, ok, err := VerifyPassphrase(req.GetPassphrase())
+	if err != nil || userId < 1 {
+		glog.Error(err)
+		return nil, grpc.Errorf(codes.Internal, "internal error, unable to complete authorization")
+	}
+	if !ok {
+		glog.Errorf("unable to match passphrase %v", req.GetPassphrase())
+		return nil, grpc.Errorf(codes.Unauthenticated, "unable to verify passphrase")
+	}
+	// generate keys
+	kSet, err := GenKeyPairForUser(userId, []byte(req.GetKeys().GetEncryptionKey()), []byte(req.GetKeys().GetSignKey()))
+	if err != nil {
+		glog.Errorf("error generating key pair")
+		return nil, grpc.Errorf(codes.Internal, "internal error, unable to complete authorization")
+	}
+
+	refToken, err := MakeRefreshToken(userId, kSet.pubEncrKey, kSet.privSign)
+	if err != nil {
+		glog.Errorf("unable to make refresh token: %v", err)
+		return nil, grpc.Errorf(codes.Internal, "internal error, unable to complete authorization")
+	}
+	return &pb.AuthResult{
+		Keys: &pb.KeySet{
+			EncryptionKey: kSet.pubEncrKey,
+			SignKey: kSet.pubSignKey,
+		},
+		TokenSet: &pb.TokenSet{
+			UserId: userId,
+			RefreshToken: refToken,
+		},
+	}, nil
+}
+
+func (s *PayloadServer) GetAccess(ctx context.Context, req *pb.RefreshRequest) (*pb.Access, error) {
+	if err := VerifyRefreshToken(req.GetTokenSet().GetUserId(), ); err != nil {
 		return nil, err
 	}
 	token := GenerateToken(50)
-	encr, err := Encrypt(req.GetUserId(), []byte(token))
+	encr, err := Encrypt(req.GetTokenSet().GetUserId(), []byte(token))
 	// TODO how to deal with cache?
-	s.tokenCache.add(, req.GetUserId())
+	// s.tokenCache.add(, req.GetUserId())
 	if err != nil {
 		return nil, err
 	}
