@@ -91,7 +91,11 @@ func (s *PayloadServer) GetAccess(ctx context.Context, req *pb.RefreshRequest) (
 		Token:     req.GetTokenSet().GetToken(),
 		Signature: req.TokenSet.GetSignature(),
 	}
-	if err := s.keys.VerifyRefreshToken(userId, ts); err != nil {
+	keys, err := s.persist.GetKeys(userId)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.keys.VerifyRefreshToken(userId, ts, keys.UserSignKey); err != nil {
 		return nil, err
 	}
 	tokenSig, plainTxtTkn, err := s.keys.MakeAccessToken(userId)
@@ -99,11 +103,8 @@ func (s *PayloadServer) GetAccess(ctx context.Context, req *pb.RefreshRequest) (
 		return nil, err
 	}
 
-	keys, err := s.persist.GetKeys(userId)
-	s.tokenCache.add(userId, keys.UserSignKey, keys.PrivSignKey, plainTxtTkn)
-	if err != nil {
-		return nil, err
-	}
+	s.tokenCache.add(userId, keys.UserSignKey, keys.PrivSignKey, plainTxtTkn, keys.UserSignKey)
+
 	return &pb.Access{
 		TokenSet: &pb.TokenSet{
 			Token:     tokenSig.Token,

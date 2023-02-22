@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"math/rand"
+	"os"
 
 	"filippo.io/age"
 	"github.com/DJolley12/home_cloud/server/persist/ports"
@@ -15,27 +16,24 @@ type KeyService struct {
 	userPersist ports.UserPersist
 }
 
-func decrypt(privK, data []byte) (*bytes.Buffer, error) {
+func decrypt(privK, data []byte) ([]byte, error) {
+	fmt.Fprintf(os.Stderr, "in decrypt data: %v\n", string(data))
 	rec, err := age.ParseX25519Identity(string(privK))
 	if err != nil {
 		return nil, err
 	}
 
 	buf := bytes.NewBuffer(data)
-	b := make([]byte, 0)
-	out := bytes.NewBuffer(b)
+	out := &bytes.Buffer{}
 
-	println(buf.String)
 	r, err := age.Decrypt(buf, rec)
 	if err != nil {
 		return nil, err
 	}
-	_, _ = r.Read(b)
-	println(string(b))
 	if _, err := io.Copy(out, r); err != nil {
 		return nil, err
 	}
-	return out, nil
+	return out.Bytes(), nil
 }
 
 func (s *KeyService) Encrypt(userId int64, data []byte) ([]byte, error) {
@@ -53,13 +51,15 @@ func encrypt(pubK, data []byte) ([]byte, error) {
 	}
 
 	out := &bytes.Buffer{}
+	dBuff := bytes.NewBuffer(data)
 
+	fmt.Fprintf(os.Stderr, "in enc %v\n", string(data))
 	w, err := age.Encrypt(out, rec)
 	if err != nil {
 		return nil, err
 	}
 	defer w.Close()
-	if _, err := w.Write(data); err != nil {
+	if _, err := io.Copy(w, dBuff); err != nil {
 		return nil, err
 	}
 	return out.Bytes(), nil
@@ -108,12 +108,12 @@ func (s *KeyService) VerifyPassphrase(userPass string) (int64, bool, error) {
 	return s.userPersist.GetUserPassphrase(userPass)
 }
 
-func (s *KeyService) VerifyRefreshToken(userId int64, tokenSig TokenSig) error {
+func (s *KeyService) VerifyRefreshToken(userId int64, tokenSig TokenSig, sigKey []byte) error {
 	k, err := s.userPersist.GetKeys(userId)
 	if err != nil {
 		return err
 	}
-	token, err := DecryptAndVerify(k.PrivEncrKey, tokenSig.Token, tokenSig.Signature)
+	token, err := DecryptAndVerify(k.PrivEncrKey, tokenSig.Token, tokenSig.Signature, sigKey)
 
 	dbToken, err := s.userPersist.GetRefreshToken(userId)
 	if err != nil {
@@ -156,13 +156,13 @@ func (s *KeyService) MakeAccessToken(userId int64) (*TokenSig, string, error) {
 	return ts, t, err
 }
 
-func DecryptAndVerify(cryptoKey, b, sig []byte) ([]byte, error) {
+func DecryptAndVerify(cryptoKey, b, sig, sigKey []byte) ([]byte, error) {
 	t, err := decrypt(cryptoKey, b)
 	if err != nil {
 		return nil, err
 	}
-	token := t.Bytes()
-	if ok := ed25519.Verify(sig, token, sig); !ok {
+	token := t
+	if ok := ed25519.Verify(sigKey, token, sig); !ok {
 		return nil, fmt.Errorf("token does not match")
 	}
 	return token, nil
@@ -170,10 +170,12 @@ func DecryptAndVerify(cryptoKey, b, sig []byte) ([]byte, error) {
 
 func encryptAndSign(b []byte, cryptoKey, signKey []byte) (*TokenSig, error) {
 	sig := ed25519.Sign(signKey, b)
+	fmt.Fprintf(os.Stderr, "sig before enc %v\n", string(b))
 	token, err := encrypt([]byte(cryptoKey), b)
 	if err != nil {
 		return nil, err
 	}
+	fmt.Fprintf(os.Stderr, "encrypted %v\n", string(token))
 
 	return &TokenSig{
 		Token:     token,

@@ -19,6 +19,7 @@ type userTokenInfo struct {
 	sig       []byte
 	cryptoKey []byte
 	token     string
+	sigKey    []byte
 }
 
 func newTokenCache(sizeLimit int, expiryLimit time.Duration) tokenCache {
@@ -29,13 +30,14 @@ func newTokenCache(sizeLimit int, expiryLimit time.Duration) tokenCache {
 	}
 }
 
-func (c *tokenCache) add(userId int64, sig []byte, cryptoKey []byte, token string) {
+func (c *tokenCache) add(userId int64, sig []byte, cryptoKey []byte, token string, sigKey []byte) {
 	c.cache[userId] = userTokenInfo{
 		expiry:    time.Now(),
 		userId:    userId,
 		sig:       sig,
 		cryptoKey: cryptoKey,
 		token:     token,
+		sigKey:    sigKey,
 	}
 }
 
@@ -62,7 +64,7 @@ func (c *tokenCache) tokenIsValid(ctx context.Context) bool {
 		return false
 	}
 
-	t, err := services.DecryptAndVerify(val.cryptoKey, []byte(token), val.sig)
+	t, err := services.DecryptAndVerify(val.cryptoKey, []byte(token), val.sig, val.sigKey)
 	if err != nil {
 		return false
 	}
