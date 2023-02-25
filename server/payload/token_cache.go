@@ -64,7 +64,7 @@ func (c *tokenCache) tokenIsValid(ctx context.Context) bool {
 		return false
 	}
 
-	t, err := services.DecryptAndVerify(val.cryptoKey, []byte(token), val.sig, val.sigKey)
+	t, err := services.DecryptAndVerify([]byte(token), val.cryptoKey, val.sig, val.sigKey)
 	if err != nil {
 		return false
 	}

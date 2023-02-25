@@ -17,22 +17,23 @@ type KeyService struct {
 }
 
 func decrypt(privK, data []byte) ([]byte, error) {
-	fmt.Fprintf(os.Stderr, "in decrypt data: %v\n", string(data))
-	rec, err := age.ParseX25519Identity(string(privK))
+	identity, err := age.ParseX25519Identity(string(privK))
 	if err != nil {
 		return nil, err
 	}
 
 	buf := bytes.NewBuffer(data)
-	out := &bytes.Buffer{}
 
-	r, err := age.Decrypt(buf, rec)
+	r, err := age.Decrypt(buf, identity)
 	if err != nil {
 		return nil, err
 	}
+
+	out := &bytes.Buffer{}
 	if _, err := io.Copy(out, r); err != nil {
 		return nil, err
 	}
+
 	return out.Bytes(), nil
 }
 
@@ -113,7 +114,7 @@ func (s *KeyService) VerifyRefreshToken(userId int64, tokenSig TokenSig, sigKey 
 	if err != nil {
 		return err
 	}
-	token, err := DecryptAndVerify(k.PrivEncrKey, tokenSig.Token, tokenSig.Signature, sigKey)
+	token, err := DecryptAndVerify(tokenSig.Token, k.PrivEncrKey, tokenSig.Signature, sigKey)
 
 	dbToken, err := s.userPersist.GetRefreshToken(userId)
 	if err != nil {
@@ -156,8 +157,8 @@ func (s *KeyService) MakeAccessToken(userId int64) (*TokenSig, string, error) {
 	return ts, t, err
 }
 
-func DecryptAndVerify(cryptoKey, b, sig, sigKey []byte) ([]byte, error) {
-	t, err := decrypt(cryptoKey, b)
+func DecryptAndVerify(data, cryptoKey, sig, sigKey []byte) ([]byte, error) {
+	t, err := decrypt(cryptoKey, data)
 	if err != nil {
 		return nil, err
 	}
@@ -168,17 +169,25 @@ func DecryptAndVerify(cryptoKey, b, sig, sigKey []byte) ([]byte, error) {
 	return token, nil
 }
 
-func encryptAndSign(b []byte, cryptoKey, signKey []byte) (*TokenSig, error) {
-	sig := ed25519.Sign(signKey, b)
-	fmt.Fprintf(os.Stderr, "sig before enc %v\n", string(b))
-	token, err := encrypt([]byte(cryptoKey), b)
+func encryptAndSign(data []byte, encryptionKey, priv []byte) (*TokenSig, error) {
+	out := &bytes.Buffer{}
+	sig := ed25519.Sign(priv, data)
+	signer := bytes.NewBuffer(data)
+
+	rec, err := age.ParseX25519Recipient(string(encryptionKey))
+	w, err := age.Encrypt(out, rec)
 	if err != nil {
 		return nil, err
 	}
-	fmt.Fprintf(os.Stderr, "encrypted %v\n", string(token))
+	if _, err := io.Copy(w, signer); err != nil {
+		return nil, err
+	}
+	if err := w.Close(); err != nil {
+		return nil, err
+	}
 
 	return &TokenSig{
-		Token:     token,
+		Token:     out.Bytes(),
 		Signature: sig,
 	}, nil
 }
