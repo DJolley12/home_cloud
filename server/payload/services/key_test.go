@@ -18,6 +18,7 @@ func TestKeyEncrypt(t *testing.T) {
 		data := []byte("test test testing")
 
 		tokenSig, err := encryptAndSign(data, []byte(recipient.String()), priv)
+		assert.NotEqual(t, string(data), string(tokenSig.Token))
 
 		c, err := DecryptAndVerify(tokenSig.Token, []byte(identity.String()), tokenSig.Signature, pub)
 		assert.Equal(t, "test test testing", string(c))
