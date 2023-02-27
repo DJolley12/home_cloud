@@ -130,10 +130,13 @@ func (s *PayloadServer) ReceivePayload(stream pb.Payload_ReceivePayloadServer) e
 	}
 
 	glog.Errorf("chunk: %v", string(in.GetChunk()))
-	if err := writeFile(f, in.GetChunk()); err != nil {
+	size := 0
+	n, err := writeFile(f, in.GetChunk())
+	if err != nil {
 		glog.Error(err)
 		return err
 	}
+	size += n
 
 	for {
 		in, err := stream.Recv()
@@ -143,13 +146,13 @@ func (s *PayloadServer) ReceivePayload(stream pb.Payload_ReceivePayloadServer) e
 			glog.Error(err)
 			return err
 		}
-
-		if err := writeFile(f, in.GetChunk()); err != nil {
+		n, err := writeFile(f, in.GetChunk())
+		if err != nil {
 			glog.Error(err)
 			return err
 		}
 
-		size += len(in.GetChunk())
+		size += n
 	}
 
 	return stream.SendAndClose(&pb.UploadResult{
@@ -158,9 +161,10 @@ func (s *PayloadServer) ReceivePayload(stream pb.Payload_ReceivePayloadServer) e
 	})
 }
 
-func (s *PayloadServer) SendPayload(ctx context.Context, req *pb.DownloadRequest, sendServer pb.Payload_SendPayloadServer) error {
+func (s *PayloadServer) SendPayload(req *pb.DownloadRequest, sendServer pb.Payload_SendPayloadServer) error {
+	ctx := sendServer.Context()
 	if !s.tokenCache.tokenIsValid(ctx) {
 		return grpc.Errorf(codes.Unauthenticated, "invalid access token")
 	}
-	return nil
+	return grpc.Errorf(codes.Unimplemented, "unimplemented")
 }

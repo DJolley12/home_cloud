@@ -17,11 +17,6 @@ func createFile(name string) (*os.File, error) {
 	return nil, err
 }
 
-func writeFile(f *os.File, b []byte) error {
-	_, err := f.Write(b)
-	if err != nil {
-		return err
-	}
-
-  return nil
+func writeFile(f *os.File, b []byte) (int, error) {
+	return f.Write(b)
 }
