@@ -11,6 +11,7 @@ import (
 
 	pb "github.com/DJolley12/home_cloud/protos"
 	"github.com/golang/glog"
+	"google.golang.org/grpc"
 )
 
 type PayloadClient struct {
@@ -33,6 +34,21 @@ func NewPayloadClient(client pb.PayloadClient, chunkSize int) (PayloadClient, er
 		client:    client,
 		chunkSize: chunkSize,
 	}, nil
+}
+
+func (c *PayloadClient) Authorize(passphrase string) (*pb.AuthResult, error) {
+	// generate keys
+	// send keys and passphrase to server
+	// receive server keys, user id
+	// decrypt token
+	// save keys and token
+}
+
+func (c *PayloadClient) GetAccess(ctx context.Context, in *pb.RefreshRequest, opts ...grpc.CallOption) (*pb.Access, error) {
+	// get keys and refresh token
+	// encrypt and sign refresh token
+	// send token, user id to server
+	// get access token, decrypt, verify
 }
 
 func (c *PayloadClient) UploadFile(filePath string) error {
