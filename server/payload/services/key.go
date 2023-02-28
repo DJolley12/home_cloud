@@ -69,26 +69,25 @@ func encrypt(pubK, data []byte) ([]byte, error) {
 type KeySet struct {
 	PrivSign   []byte
 	PubSignKey []byte
-	PubEncrKey string
+	Recipient  string
 }
 
-// returns server's generated public encryption key, public sign key, error
+// returns sign keys, encryption key
 func (s *KeyService) GenKeyPairForUser(userId int64, userEncrKey, userSignKey []byte) (*KeySet, error) {
-	privEncrId, err := age.GenerateX25519Identity()
+	identity, err := age.GenerateX25519Identity()
 	if err != nil {
 		return nil, err
 	}
-	pubEncryR := privEncrId.Recipient()
+	recipient := identity.Recipient()
 
 	pubSign, privSign, err := ed25519.GenerateKey(nil)
 	if err != nil {
 		return nil, err
 	}
 
-	pubEncrStr := pubEncryR.String()
 	k := ports.Keys{
-		PubEncrKey:  []byte(pubEncrStr),
-		PrivEncrKey: []byte(privEncrId.String()),
+		Recipient:   []byte(recipient.String()),
+		Identity:    []byte(identity.String()),
 		PubSignKey:  pubSign,
 		PrivSignKey: privSign,
 		UserEncrKey: userEncrKey,
@@ -101,7 +100,7 @@ func (s *KeyService) GenKeyPairForUser(userId int64, userEncrKey, userSignKey []
 	return &KeySet{
 		PrivSign:   privSign,
 		PubSignKey: pubSign,
-		PubEncrKey: pubEncrStr,
+		Recipient:  recipient.String(),
 	}, nil
 }
 
@@ -114,7 +113,7 @@ func (s *KeyService) VerifyRefreshToken(userId int64, tokenSig TokenSig, sigKey 
 	if err != nil {
 		return err
 	}
-	token, err := DecryptAndVerify(tokenSig.Token, k.PrivEncrKey, tokenSig.Signature, sigKey)
+	token, err := DecryptAndVerify(tokenSig.Token, k.Identity, tokenSig.Signature, sigKey)
 
 	dbToken, err := s.userPersist.GetRefreshToken(userId)
 	if err != nil {

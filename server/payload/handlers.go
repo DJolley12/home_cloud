@@ -75,7 +75,7 @@ func (s *PayloadServer) Authorize(ctx context.Context, req *pb.AuthRequest) (*pb
 	return &pb.AuthResult{
 		UserId: userId,
 		Keys: &pb.KeySet{
-			EncryptionKey: kSet.PubEncrKey,
+			EncryptionKey: kSet.Recipient,
 			SignKey:       kSet.PubSignKey,
 		},
 		TokenSet: &pb.TokenSet{
