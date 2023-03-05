@@ -1,6 +1,8 @@
 package adapters
 
 import (
+	"fmt"
+
 	"github.com/DJolley12/home_cloud/server/persist/db"
 	"github.com/DJolley12/home_cloud/server/persist/ports"
 )
@@ -17,7 +19,7 @@ func NewUserPersist(c ports.DBConfig) UserPersist {
 
 func (p UserPersist) InsertKeySet(userId int64, keys ports.Keys) error {
 	sql := `
-	INSERT INTO key_set(
+	INSERT INTO key_set (
   	public_key,
   	private_key,
   	public_sign_key,
@@ -26,7 +28,7 @@ func (p UserPersist) InsertKeySet(userId int64, keys ports.Keys) error {
   	user_sign_key,
   	user_id
 	)
-	VALUES(
+	VALUES (
   	$1,
   	$2,
   	$3,
@@ -76,7 +78,7 @@ func (p UserPersist) GetKeys(userId int64) (*ports.Keys, error) {
 	var id int
 	var uId int
 	k := ports.Keys{}
-	rows.Scan(
+	err = rows.Scan(
 		&id,
 		&k.Recipient,
 		&k.Identity,
@@ -86,22 +88,62 @@ func (p UserPersist) GetKeys(userId int64) (*ports.Keys, error) {
 		&k.UserSignKey,
 		uId,
 	)
+	if err != nil {
+		return nil, err
+	}
 
 	return &k, nil
 }
 
-func (p UserPersist) GetPrivateKey(userId int64) ([]byte, error) {
-	panic("unimplemented")
-}
-
-func (p UserPersist) GetPublicKey(userId int64) ([]byte, error) {
-	panic("unimplemented")
-}
-
 func (p UserPersist) InsertRefreshToken(userId int64, token string) error {
-	panic("unimplemented")
+	sql := `
+	INSERT INTO refresh_token (user_id, token)
+		VALUES ($1, $2);
+	`
+	_, err := p.c.Execute(sql, userId, token)
+	return err
 }
 
 func (p UserPersist) GetUserPassphrase(passphrase string) (int64, bool, error) {
-	panic("unimplemented")
+	if passphrase == "" {
+		return -1, false, fmt.Errorf("passphrase must not be empty")
+	}
+	sql := `
+	SELECT (
+		passphrase, user_id
+	)
+	FROM passphrase
+	WHERE passphrase = $1
+		AND expiry > CURRENT_TIMESTAMP
+		AND is_unused = FALSE;
+	`
+	rows, err := p.c.Query(sql, passphrase)
+	if err != nil {
+		return -1, false, err
+	}
+
+	var userId int64
+	var dbPassphrase string
+	err = rows.Scan(&dbPassphrase, &userId)
+	if err != nil {
+		return -1, false, err
+	}
+	if passphrase == dbPassphrase {
+		return userId, true, nil
+	}
+
+	return -1, false, fmt.Errorf("passphrase does not match")
+}
+
+func (p UserPersist) InsertUserPassphrase(userId int64, passphrase string) error {
+	if passphrase == "" {
+		return fmt.Errorf("passphrase must not be empty")
+	}
+
+	sql := `
+	INSERT INTO passphrase (passphrase, user_id)
+	  VALUES ($1, $2);
+	`
+	_, err := p.c.Execute(sql, passphrase, userId)
+	return err
 }

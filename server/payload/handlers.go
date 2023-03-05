@@ -10,6 +10,7 @@ import (
 
 	pb "github.com/DJolley12/home_cloud/protos"
 	services "github.com/DJolley12/home_cloud/server/payload/services"
+	"github.com/DJolley12/home_cloud/server/persist/adapters"
 	"github.com/DJolley12/home_cloud/server/persist/ports"
 	"github.com/golang/glog"
 	"google.golang.org/grpc"
@@ -23,21 +24,26 @@ type PayloadServer struct {
 	tokenCache tokenCache
 	passCache  passCache
 	tokenSize  int
-	keys       services.KeyService
+	keyService services.KeyService
 	persist    ports.UserPersist
 }
 
-func NewPaylodServer(basePath string) (*PayloadServer, error) {
+func NewPaylodServer(basePath string, dbConfig ports.DBConfig) (*PayloadServer, error) {
 	if _, err := os.Stat(basePath); err != nil {
-		return &PayloadServer{}, fmt.Errorf("path error: %v", err)
+		return nil, fmt.Errorf("path error: %v", err)
 	}
 
 	c := newTokenCache(100, 5)
 	p := newPassCache(100, 5)
-	server := &PayloadServer{
+	ks, err := services.NewKeyService(adapters.NewUserPersist(dbConfig))
+	if err != nil {
+		return nil, err
+	}
+	server := PayloadServer{
 		basePath:   basePath,
 		tokenCache: c,
 		passCache:  p,
+		keyService: *ks,
 	}
 	go func() {
 		server.tokenCache.collectTokens()
@@ -45,12 +51,12 @@ func NewPaylodServer(basePath string) (*PayloadServer, error) {
 		time.Sleep(15 * time.Second)
 	}()
 
-	return server, nil
+	return &server, nil
 }
 
 func (s *PayloadServer) Authorize(ctx context.Context, req *pb.AuthRequest) (*pb.AuthResult, error) {
 	// verify
-	userId, ok, err := s.keys.VerifyPassphrase(req.GetPassphrase())
+	userId, ok, err := s.keyService.VerifyPassphrase(req.GetPassphrase())
 	if err != nil || userId < 1 {
 		glog.Error(err)
 		return nil, grpc.Errorf(codes.Internal, "internal error, unable to complete authorization")
@@ -60,13 +66,13 @@ func (s *PayloadServer) Authorize(ctx context.Context, req *pb.AuthRequest) (*pb
 		return nil, grpc.Errorf(codes.Unauthenticated, "unable to verify passphrase")
 	}
 	// generate keys
-	kSet, err := s.keys.GenKeyPairForUser(userId, []byte(req.GetKeys().GetEncryptionKey()), []byte(req.GetKeys().GetSignKey()))
+	kSet, err := s.keyService.GenKeyPairForUser(userId, []byte(req.GetKeys().GetEncryptionKey()), []byte(req.GetKeys().GetSignKey()))
 	if err != nil {
 		glog.Errorf("error generating key pair")
 		return nil, grpc.Errorf(codes.Internal, "internal error, unable to complete authorization")
 	}
 	// refresh token
-	tokenSig, err := s.keys.MakeRefreshToken(userId, req.GetKeys().GetEncryptionKey(), kSet.PrivSign)
+	tokenSig, err := s.keyService.MakeRefreshToken(userId, req.GetKeys().GetEncryptionKey(), kSet.PrivSign)
 	if err != nil {
 		glog.Errorf("unable to make refresh token: %v", err)
 		return nil, grpc.Errorf(codes.Internal, "internal error, unable to complete authorization")
@@ -95,10 +101,10 @@ func (s *PayloadServer) GetAccess(ctx context.Context, req *pb.RefreshRequest) (
 	if err != nil {
 		return nil, err
 	}
-	if err := s.keys.VerifyRefreshToken(userId, ts, keys.UserSignKey); err != nil {
+	if err := s.keyService.VerifyRefreshToken(userId, ts, keys.UserSignKey); err != nil {
 		return nil, err
 	}
-	tokenSig, plainTxtTkn, err := s.keys.MakeAccessToken(userId)
+	tokenSig, plainTxtTkn, err := s.keyService.MakeAccessToken(userId)
 	if err != nil {
 		return nil, err
 	}

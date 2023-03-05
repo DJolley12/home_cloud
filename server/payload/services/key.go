@@ -16,6 +16,15 @@ type KeyService struct {
 	userPersist ports.UserPersist
 }
 
+func NewKeyService(persist ports.UserPersist) (*KeyService, error) {
+	if persist == nil {
+		return nil, fmt.Errorf("persist cannot be nil")
+	}
+	return &KeyService{
+		userPersist: persist,
+	}, nil
+}
+
 func decrypt(privK, data []byte) ([]byte, error) {
 	identity, err := age.ParseX25519Identity(string(privK))
 	if err != nil {
@@ -38,11 +47,11 @@ func decrypt(privK, data []byte) ([]byte, error) {
 }
 
 func (s *KeyService) Encrypt(userId int64, data []byte) ([]byte, error) {
-	key, err := s.userPersist.GetPublicKey(userId)
+	keys, err := s.userPersist.GetKeys(userId)
 	if err != nil {
 		return nil, err
 	}
-	return encrypt(key, data)
+	return encrypt(keys.UserEncrKey, data)
 }
 
 func encrypt(pubK, data []byte) ([]byte, error) {

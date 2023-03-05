@@ -42,6 +42,7 @@ func (c *PayloadClient) Authorize(passphrase string) (*pb.AuthResult, error) {
 	// receive server keys, user id
 	// decrypt token
 	// save keys and token
+	panic("unimplemented")
 }
 
 func (c *PayloadClient) GetAccess(ctx context.Context, in *pb.RefreshRequest, opts ...grpc.CallOption) (*pb.Access, error) {
@@ -49,6 +50,7 @@ func (c *PayloadClient) GetAccess(ctx context.Context, in *pb.RefreshRequest, op
 	// encrypt and sign refresh token
 	// send token, user id to server
 	// get access token, decrypt, verify
+	panic("unimplemented")
 }
 
 func (c *PayloadClient) UploadFile(filePath string) error {
