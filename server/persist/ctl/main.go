@@ -5,7 +5,8 @@ import (
 	"log"
 
 	"github.com/DJolley12/home_cloud/server/persist/db"
-	mg "github.com/DJolley12/home_cloud/server/persist/migrations"
+	mg "github.com/DJolley12/home_cloud/server/persist/migration"
+	"github.com/DJolley12/home_cloud/server/persist/ports"
 )
 
 const (
@@ -33,7 +34,14 @@ func main() {
 		}
 	}
 
-	conn := db.NewConn(port, host, user, password, dbname)
+	conf := ports.DBConfig{
+		Port:     port,
+		Host:     host,
+		User:     user,
+		Password: password,
+		DBName:   dbname,
+	}
+	conn := db.NewConn(conf)
 	if *ma == "init" {
 		log.Println("init")
 		if res, err := mg.Init(conn); err != nil {

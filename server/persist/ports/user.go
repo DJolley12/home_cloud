@@ -3,8 +3,8 @@ package ports
 import ()
 
 type Keys struct {
-	Recipient  []byte
-	Identity []byte
+	Recipient   []byte
+	Identity    []byte
 	PubSignKey  []byte
 	PrivSignKey []byte
 	UserEncrKey []byte

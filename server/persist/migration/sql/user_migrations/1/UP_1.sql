@@ -28,12 +28,15 @@ CREATE TABLE payload_download_history (
   user_id BIGINT NOT NULL
 );
 
-CREATE TABLE cypto_key_set (
+CREATE TABLE key_set (
   id BIGSERIAL PRIMARY KEY,
   public_key BYTEA NOT NULL,
   private_key BYTEA NOT NULL,
+  public_sign_key BYTEA NOT NULL,
+  private_sign_key BYTEA NOT NULL,
   user_public_key BYTEA NOT NULL,
-  user_id BIGINT NOT NULL,
+  user_sign_key BYTEA NOT NULL,
+  user_id BIGINT NOT NULL
 );
 
 CREATE TABLE refresh_token (

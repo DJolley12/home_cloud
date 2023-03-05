@@ -4,24 +4,17 @@ import (
 	"database/sql"
 	"fmt"
 
+	"github.com/DJolley12/home_cloud/server/persist/ports"
 	_ "github.com/lib/pq"
 )
 
 type Conn struct {
-	host     string
-	port     int
-	user     string
-	dbname   string
-	password string
+	config ports.DBConfig
 }
 
-func NewConn(port int, host, user, password, dbname string) Conn {
+func NewConn(c ports.DBConfig) Conn {
 	return Conn{
-		host:     host,
-		port:     port,
-		user:     user,
-		dbname:   dbname,
-		password: password,
+		c,
 	}
 }
 
@@ -48,5 +41,5 @@ func (c *Conn) Query(q string, params ...any) (*sql.Rows, error) {
 
 func (c *Conn) getInfo() string {
 	return fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=disable",
-		c.host, c.port, c.user, c.password, c.dbname)
+		c.config.Host, c.config.Port, c.config.User, c.config.Password, c.config.DBName)
 }

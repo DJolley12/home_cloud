@@ -146,7 +146,7 @@ func (t *MigrationType) RunMigration(c db.Conn, id int64, name, desc, dbName str
 		_, err = c.Execute(dSql)
 	}
 
-	return "successfully ran migration %v", nil
+	return fmt.Sprintf("successfully ran migration %v", id), nil
 }
 
 func validateId(c db.Conn, id int64) error {
@@ -188,11 +188,6 @@ func (t *MigrationType) fmt(id int64) string {
 }
 
 func getSql(name string) (string, error) {
-	// curr, err := os.Getwd()
-	// if err != nil {
-	// 	return "", err
-	// }
-	fmt.Fprintf(os.Stderr, "name: %v\n", name)
 	b, err := os.ReadFile(filepath.Join(base, name))
 	if err != nil {
 		return "", err
