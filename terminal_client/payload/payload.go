@@ -12,10 +12,10 @@ import (
 	pb "github.com/DJolley12/home_cloud/protos"
 	"github.com/DJolley12/home_cloud/shared/encryption"
 	"github.com/golang/glog"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type PayloadClient struct {
-	ctx    context.Context
 	client pb.PayloadClient
 
 	chunkSize    int
@@ -23,7 +23,8 @@ type PayloadClient struct {
 	passphrase   string
 	userKeySet   UserKeySet
 	serverKeySet ServerKeySet
-	token        Token
+	refreshToken Token
+	accessToken  Token
 }
 
 func NewPayloadClient(client pb.PayloadClient, chunkSize int) (PayloadClient, error) {
@@ -38,7 +39,6 @@ func NewPayloadClient(client pb.PayloadClient, chunkSize int) (PayloadClient, er
 		return PayloadClient{}, err
 	}
 	return PayloadClient{
-		ctx:       context.Background(),
 		client:    client,
 		chunkSize: chunkSize,
 	}, nil
@@ -52,7 +52,7 @@ func (c *PayloadClient) Authorize(passphrase string) error {
 	}
 	c.userKeySet = *ks
 	// send keys and passphrase to server
-	res, err := c.client.Authorize(c.ctx, &pb.AuthRequest{
+	res, err := c.client.Authorize(context.Background(), &pb.AuthRequest{
 		Keys: &pb.KeySet{
 			EncryptionKey: c.userKeySet.Recipient,
 			SignKey:       c.userKeySet.PubSignKey,
@@ -65,9 +65,9 @@ func (c *PayloadClient) Authorize(passphrase string) error {
 
 	ts, k := res.GetTokenSet(), res.GetKeys()
 	// unencrypt token, verify
-	c.token = Token{}
-	c.token.Expiry = ts.Expiry.AsTime()
-	c.token.RefreshToken, err = encryption.DecryptAndVerify(ts.GetToken(),
+	c.refreshToken = Token{}
+	c.refreshToken.Expiry = ts.Expiry.AsTime()
+	c.refreshToken.Token, err = encryption.DecryptAndVerify(ts.GetToken(),
 		[]byte(c.userKeySet.Identity), ts.GetSignature(), k.GetSignKey())
 
 	if err != nil {
@@ -86,29 +86,61 @@ func (c *PayloadClient) Authorize(passphrase string) error {
 		return err
 	}
 	// save refresh token
-	return c.keyService.SaveToken(c.token)
+	return c.keyService.SaveToken(c.refreshToken)
 }
 
 func (c *PayloadClient) GetAccess() error {
-	// TODO check expiry time 
+	// TODO check expiry time
 	// get keys and refresh token
-	ts, err := encryption.EncryptAndSign(c.token.RefreshToken, []byte(c.serverKeySet.Recipient), []byte(c.serverKeySet.PubSignKey))
-	if err != nil {
-	  return err
-	}
 	// encrypt and sign refresh token
+	ts, err := encryption.EncryptAndSign(c.refreshToken.Token, []byte(c.serverKeySet.Recipient), []byte(c.serverKeySet.PubSignKey))
+	if err != nil {
+		return err
+	}
 	// send token, user id to server
-	// get access token, decrypt, verify
 
+	timeStamp := &timestamppb.Timestamp{
+		Seconds: int64(c.refreshToken.Expiry.Unix()),
+		Nanos:   int32(c.refreshToken.Expiry.Nanosecond()),
+	}
+	req := &pb.RefreshRequest{
+		TokenSet: &pb.TokenSet{
+			Token:     ts.Token,
+			Signature: ts.Signature,
+			Expiry:    timeStamp,
+		},
+	}
+	ctx := context.WithValue(context.Background(), "user-id", c.serverKeySet.UserId)
+	res, err := c.client.GetAccess(ctx, req)
+	if err != nil {
+		return err
+	}
+
+	rts := res.GetTokenSet()
+	at, err := encryption.DecryptAndVerify(rts.GetToken(),
+		[]byte(c.userKeySet.Identity), rts.GetSignature(), c.serverKeySet.PubSignKey)
+
+	c.accessToken = Token{
+		Token:  at,
+		Expiry: rts.GetExpiry().AsTime(),
+	}
+
+	return nil
 }
 
 func (c *PayloadClient) UploadFile(filePath string) error {
+	at, err := encryption.EncryptAndSign(c.accessToken.Token, []byte(c.serverKeySet.Recipient), c.userKeySet.PrivSignKey)
+	if err != nil {
+		return err
+	}
+	ctx := context.WithValue(context.Background(), "access-token", at)
+
 	file, err := os.Open(filePath)
 	if err != nil {
 		fmt.Printf("error opening file %v - err: %v\n", filePath, err)
 	}
 	defer file.Close()
-	p, err := c.client.ReceivePayload(context.Background())
+	p, err := c.client.ReceivePayload(ctx)
 	if err != nil {
 		fmt.Printf("error getting payload upload: %v\n", err)
 		return err

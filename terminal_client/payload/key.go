@@ -34,7 +34,7 @@ type ServerKeySet struct {
 }
 
 type Token struct {
-	RefreshToken []byte `json:"refresh-token"`
+	Token []byte `json:"token"`
 	Expiry       time.Time `json:"expiry"`
 }
 
