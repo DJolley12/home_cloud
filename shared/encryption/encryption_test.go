@@ -1,4 +1,4 @@
-package services
+package encryption
 
 import (
 	"crypto/ed25519"
@@ -17,7 +17,7 @@ func TestKeyEncrypt(t *testing.T) {
 		pub, priv, _ := ed25519.GenerateKey(nil)
 		data := []byte("test test testing")
 
-		tokenSig, err := encryptAndSign(data, []byte(recipient.String()), priv)
+		tokenSig, err := EncryptAndSign(data, []byte(recipient.String()), priv)
 		assert.NotEqual(t, string(data), string(tokenSig.Token))
 
 		c, err := DecryptAndVerify(tokenSig.Token, []byte(identity.String()), tokenSig.Signature, pub)

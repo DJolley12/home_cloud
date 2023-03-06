@@ -2,6 +2,7 @@ package adapters
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/DJolley12/home_cloud/server/persist/db"
 	"github.com/DJolley12/home_cloud/server/persist/ports"
@@ -95,13 +96,19 @@ func (p UserPersist) GetKeys(userId int64) (*ports.Keys, error) {
 	return &k, nil
 }
 
-func (p UserPersist) InsertRefreshToken(userId int64, token string) error {
+func (p UserPersist) InsertRefreshToken(userId int64, token string) (*time.Time, error) {
 	sql := `
 	INSERT INTO refresh_token (user_id, token)
-		VALUES ($1, $2);
+		VALUES ($1, $2)
+	RETURNING expiry;
 	`
-	_, err := p.c.Execute(sql, userId, token)
-	return err
+	rows, err := p.c.Query(sql, userId, token)
+	if err != nil {
+		return nil, err
+	}
+	var expiry time.Time
+	err = rows.Scan(&expiry)
+	return &expiry, err
 }
 
 func (p UserPersist) GetUserPassphrase(passphrase string) (int64, bool, error) {

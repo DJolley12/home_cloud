@@ -1,6 +1,6 @@
 package ports
 
-import ()
+import "time"
 
 type Keys struct {
 	Recipient   []byte
@@ -13,7 +13,7 @@ type Keys struct {
 
 type UserPersist interface {
 	GetRefreshToken(userId int64) (string, error)
-	InsertRefreshToken(userId int64, token string) error
+	InsertRefreshToken(userId int64, token string) (*time.Time, error)
 	GetKeys(userId int64) (*Keys, error)
 	InsertKeySet(userId int64, keys Keys) error
 	GetUserPassphrase(passphrase string) (int64, bool, error)

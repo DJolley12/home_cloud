@@ -12,9 +12,11 @@ import (
 	services "github.com/DJolley12/home_cloud/server/payload/services"
 	"github.com/DJolley12/home_cloud/server/persist/adapters"
 	"github.com/DJolley12/home_cloud/server/persist/ports"
+	"github.com/DJolley12/home_cloud/shared/encryption"
 	"github.com/golang/glog"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/protobuf/types/known/timestamppb"
 	// "google.golang.org/grpc/metadata"
 )
 
@@ -72,7 +74,7 @@ func (s *PayloadServer) Authorize(ctx context.Context, req *pb.AuthRequest) (*pb
 		return nil, grpc.Errorf(codes.Internal, "internal error, unable to complete authorization")
 	}
 	// refresh token
-	tokenSig, err := s.keyService.MakeRefreshToken(userId, req.GetKeys().GetEncryptionKey(), kSet.PrivSign)
+	expiry, tokenSig, err := s.keyService.MakeRefreshToken(userId, req.GetKeys().GetEncryptionKey(), kSet.PrivSign)
 	if err != nil {
 		glog.Errorf("unable to make refresh token: %v", err)
 		return nil, grpc.Errorf(codes.Internal, "internal error, unable to complete authorization")
@@ -87,13 +89,17 @@ func (s *PayloadServer) Authorize(ctx context.Context, req *pb.AuthRequest) (*pb
 		TokenSet: &pb.TokenSet{
 			Token:     tokenSig.Token,
 			Signature: tokenSig.Signature,
+			Expiry: &timestamppb.Timestamp{
+				Seconds: expiry.Unix(),
+				Nanos:   int32(expiry.Nanosecond()),
+			},
 		},
 	}, nil
 }
 
 func (s *PayloadServer) GetAccess(ctx context.Context, req *pb.RefreshRequest) (*pb.Access, error) {
 	userId := ctx.Value("user-id").(int64)
-	ts := services.TokenSig{
+	ts := encryption.TokenSig{
 		Token:     req.GetTokenSet().GetToken(),
 		Signature: req.TokenSet.GetSignature(),
 	}

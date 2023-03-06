@@ -1,6 +1,8 @@
 syntax = "proto3";
 option go_package = "./";
 
+import "google/protobuf/timestamp.proto";
+
 service Payload {
   // exchange public keys
   // get refresh token
@@ -39,6 +41,7 @@ message KeySet {
 message TokenSet {
   bytes token = 1;
   bytes signature = 2;
+  google.protobuf.Timestamp expiry = 3;
 }
 
 message DataChunk {

@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/DJolley12/home_cloud/server/payload/services"
+	"github.com/DJolley12/home_cloud/shared/encryption"
 )
 
 type tokenCache struct {
@@ -64,7 +64,7 @@ func (c *tokenCache) tokenIsValid(ctx context.Context) bool {
 		return false
 	}
 
-	t, err := services.DecryptAndVerify([]byte(token), val.cryptoKey, val.sig, val.sigKey)
+	t, err := encryption.DecryptAndVerify([]byte(token), val.cryptoKey, val.sig, val.sigKey)
 	if err != nil {
 		return false
 	}

@@ -10,13 +10,20 @@ import (
 	"path/filepath"
 
 	pb "github.com/DJolley12/home_cloud/protos"
+	"github.com/DJolley12/home_cloud/shared/encryption"
 	"github.com/golang/glog"
-	"google.golang.org/grpc"
 )
 
 type PayloadClient struct {
-	client    pb.PayloadClient
-	chunkSize int
+	ctx    context.Context
+	client pb.PayloadClient
+
+	chunkSize    int
+	keyService   KeyService
+	passphrase   string
+	userKeySet   UserKeySet
+	serverKeySet ServerKeySet
+	token        Token
 }
 
 func NewPayloadClient(client pb.PayloadClient, chunkSize int) (PayloadClient, error) {
@@ -31,26 +38,68 @@ func NewPayloadClient(client pb.PayloadClient, chunkSize int) (PayloadClient, er
 		return PayloadClient{}, err
 	}
 	return PayloadClient{
+		ctx:       context.Background(),
 		client:    client,
 		chunkSize: chunkSize,
 	}, nil
 }
 
-func (c *PayloadClient) Authorize(passphrase string) (*pb.AuthResult, error) {
+func (c *PayloadClient) Authorize(passphrase string) error {
 	// generate keys
+	ks, err := c.keyService.GenKeyPair()
+	if err != nil {
+		return err
+	}
+	c.userKeySet = *ks
 	// send keys and passphrase to server
-	// receive server keys, user id
-	// decrypt token
-	// save keys and token
-	panic("unimplemented")
+	res, err := c.client.Authorize(c.ctx, &pb.AuthRequest{
+		Keys: &pb.KeySet{
+			EncryptionKey: c.userKeySet.Recipient,
+			SignKey:       c.userKeySet.PubSignKey,
+		},
+		Passphrase: c.passphrase,
+	})
+	if err != nil {
+		return err
+	}
+
+	ts, k := res.GetTokenSet(), res.GetKeys()
+	// unencrypt token, verify
+	c.token = Token{}
+	c.token.Expiry = ts.Expiry.AsTime()
+	c.token.RefreshToken, err = encryption.DecryptAndVerify(ts.GetToken(),
+		[]byte(c.userKeySet.Identity), ts.GetSignature(), k.GetSignKey())
+
+	if err != nil {
+		return err
+	}
+	// save server keys
+	c.serverKeySet = ServerKeySet{
+		UserId:     res.GetUserId(),
+		PubSignKey: res.GetKeys().GetSignKey(),
+		Recipient:  res.GetKeys().GetEncryptionKey(),
+	}
+	err = c.keyService.SaveServerKeys(
+		c.serverKeySet,
+	)
+	if err != nil {
+		return err
+	}
+	// save refresh token
+	return c.keyService.SaveToken(c.token)
 }
 
-func (c *PayloadClient) GetAccess(ctx context.Context, in *pb.RefreshRequest, opts ...grpc.CallOption) (*pb.Access, error) {
+func (c *PayloadClient) GetAccess() error {
+	// TODO check expiry time 
 	// get keys and refresh token
+	ts, err := encryption.EncryptAndSign(c.token.RefreshToken, []byte(c.serverKeySet.Recipient), []byte(c.serverKeySet.PubSignKey))
+	if err != nil {
+	  return err
+	}
 	// encrypt and sign refresh token
 	// send token, user id to server
 	// get access token, decrypt, verify
-	panic("unimplemented")
+
 }
 
 func (c *PayloadClient) UploadFile(filePath string) error {

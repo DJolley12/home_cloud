@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"os"
 	"path"
+	"time"
 
 	// "fmt"
 	// "io"
@@ -19,15 +20,26 @@ type KeyService struct {
 	baseDir string
 }
 
-type KeySet struct {
-	PrivSignKey []byte `json:privSignKey`
-	PubSignKey  []byte `json:pubSignKey`
-	Identity    string `json:identity`
-	Recipient   string `json:reciptient`
+type UserKeySet struct {
+	PrivSignKey []byte `json:"privSignKey"`
+	PubSignKey  []byte `json:"pubSignKey"`
+	Identity    string `json:"identity"`
+	Recipient   string `json:"recipient"`
+}
+
+type ServerKeySet struct {
+	UserId     int64  `json:"userId"`
+	PubSignKey []byte `json:"pubSignKey"`
+	Recipient  string `json:"recipient"`
+}
+
+type Token struct {
+	RefreshToken []byte `json:"refresh-token"`
+	Expiry       time.Time `json:"expiry"`
 }
 
 // returns server's generated public encryption key, public sign key, error
-func (s *KeyService) GenKeyPair() (*KeySet, error) {
+func (s *KeyService) GenKeyPair() (*UserKeySet, error) {
 	identity, err := age.GenerateX25519Identity()
 	if err != nil {
 		return nil, err
@@ -39,7 +51,7 @@ func (s *KeyService) GenKeyPair() (*KeySet, error) {
 		return nil, err
 	}
 
-	k := KeySet{
+	k := UserKeySet{
 		Recipient:   recipient.String(),
 		Identity:    identity.String(),
 		PubSignKey:  pubSign,
@@ -49,20 +61,32 @@ func (s *KeyService) GenKeyPair() (*KeySet, error) {
 		return nil, err
 	}
 
-	return &KeySet{
+	return &UserKeySet{
 		PrivSignKey: privSign,
 		PubSignKey:  pubSign,
 		Recipient:   recipient.String(),
 	}, nil
 }
 
-func (s *KeyService) saveClientKeySet(k KeySet) error {
-	json, err := json.Marshal(k)
+func (s *KeyService) saveClientKeySet(k UserKeySet) error {
+	return save(k, path.Join(s.baseDir, "client-keys.json"))
+}
+
+func (s *KeyService) SaveServerKeys(k ServerKeySet) error {
+	return save(k, path.Join(s.baseDir, "server-keys.json"))
+}
+
+func (s *KeyService) SaveToken(token Token) error {
+	return save(token, path.Join(s.baseDir, "refresh-token.json"))
+}
+
+func save(data any, path string) error {
+	json, err := json.Marshal(data)
 	if err != nil {
 		return err
 	}
 
-	f, err := os.Create(path.Join(s.baseDir, "client-keys.json"))
+	f, err := os.Create(path)
 	if err != nil {
 		return err
 	}
