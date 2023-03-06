@@ -8,11 +8,12 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"time"
 
 	pb "github.com/DJolley12/home_cloud/protos"
 	"github.com/DJolley12/home_cloud/shared/encryption"
+	"github.com/DJolley12/home_cloud/shared/utils"
 	"github.com/golang/glog"
-	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type PayloadClient struct {
@@ -99,15 +100,11 @@ func (c *PayloadClient) GetAccess() error {
 	}
 	// send token, user id to server
 
-	timeStamp := &timestamppb.Timestamp{
-		Seconds: int64(c.refreshToken.Expiry.Unix()),
-		Nanos:   int32(c.refreshToken.Expiry.Nanosecond()),
-	}
 	req := &pb.RefreshRequest{
 		TokenSet: &pb.TokenSet{
 			Token:     ts.Token,
 			Signature: ts.Signature,
-			Expiry:    timeStamp,
+			Expiry:    utils.ToTimeStamppb(c.refreshToken.Expiry),
 		},
 	}
 	ctx := context.WithValue(context.Background(), "user-id", c.serverKeySet.UserId)
@@ -129,6 +126,10 @@ func (c *PayloadClient) GetAccess() error {
 }
 
 func (c *PayloadClient) UploadFile(filePath string) error {
+	if c.accessToken.Expiry.Before(time.Now()) {
+		return fmt.Errorf("access token expired at %v - please reauth and continue", c.accessToken.Expiry)
+	}
+
 	at, err := encryption.EncryptAndSign(c.accessToken.Token, []byte(c.serverKeySet.Recipient), c.userKeySet.PrivSignKey)
 	if err != nil {
 		return err

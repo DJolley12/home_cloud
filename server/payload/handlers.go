@@ -13,11 +13,10 @@ import (
 	"github.com/DJolley12/home_cloud/server/persist/adapters"
 	"github.com/DJolley12/home_cloud/server/persist/ports"
 	"github.com/DJolley12/home_cloud/shared/encryption"
+	"github.com/DJolley12/home_cloud/shared/utils"
 	"github.com/golang/glog"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
-	"google.golang.org/protobuf/types/known/timestamppb"
-	// "google.golang.org/grpc/metadata"
 )
 
 type PayloadServer struct {
@@ -89,10 +88,7 @@ func (s *PayloadServer) Authorize(ctx context.Context, req *pb.AuthRequest) (*pb
 		TokenSet: &pb.TokenSet{
 			Token:     tokenSig.Token,
 			Signature: tokenSig.Signature,
-			Expiry: &timestamppb.Timestamp{
-				Seconds: expiry.Unix(),
-				Nanos:   int32(expiry.Nanosecond()),
-			},
+			Expiry:    utils.ToTimeStamppb(*expiry),
 		},
 	}, nil
 }
@@ -115,12 +111,13 @@ func (s *PayloadServer) GetAccess(ctx context.Context, req *pb.RefreshRequest) (
 		return nil, err
 	}
 
-	s.tokenCache.add(userId, keys.UserSignKey, keys.PrivSignKey, plainTxtTkn, keys.UserSignKey)
+	expiry := s.tokenCache.add(userId, keys.UserSignKey, keys.PrivSignKey, plainTxtTkn, keys.UserSignKey)
 
 	return &pb.Access{
 		TokenSet: &pb.TokenSet{
 			Token:     tokenSig.Token,
 			Signature: tokenSig.Signature,
+			Expiry:    utils.ToTimeStamppb(expiry),
 		},
 	}, nil
 }

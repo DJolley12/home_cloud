@@ -30,15 +30,17 @@ func newTokenCache(sizeLimit int, expiryLimit time.Duration) tokenCache {
 	}
 }
 
-func (c *tokenCache) add(userId int64, sig []byte, cryptoKey []byte, token string, sigKey []byte) {
+func (c *tokenCache) add(userId int64, sig []byte, cryptoKey []byte, token string, sigKey []byte) time.Time {
+	expiry := time.Now()
 	c.cache[userId] = userTokenInfo{
-		expiry:    time.Now(),
+		expiry:    expiry,
 		userId:    userId,
 		sig:       sig,
 		cryptoKey: cryptoKey,
 		token:     token,
 		sigKey:    sigKey,
 	}
+	return expiry
 }
 
 func (c *tokenCache) tokenIsValid(ctx context.Context) bool {
